@@ -4,8 +4,14 @@ package com.hichinfo.jobms.job.impl;
 import com.hichinfo.jobms.job.Job;
 import com.hichinfo.jobms.job.JobRepository;
 import com.hichinfo.jobms.job.JobService;
-import com.hichinfo.jobms.job.dto.JobWithCompanyDTO;
+import com.hichinfo.jobms.job.dto.JobDTO;
 import com.hichinfo.jobms.job.external.Company;
+import com.hichinfo.jobms.job.external.Review;
+import com.hichinfo.jobms.job.mapper.JobMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -18,17 +24,18 @@ import java.util.stream.Collectors;
 public class JobServiceImpl implements JobService {
 
     JobRepository jobRepository;
+    @Autowired
+    RestTemplate restTemplate;
 
     public JobServiceImpl(JobRepository jobRepository) {
         this.jobRepository = jobRepository;
     }
 
 
-
     @Override
-    public List<JobWithCompanyDTO> findAll() {
+    public List<JobDTO> findAll() {
         List<Job> jobs = jobRepository.findAll();
-        List<JobWithCompanyDTO> jobWithCompanyDTOS = new ArrayList<>();
+        List<JobDTO> jobDTOS = new ArrayList<>();
 
 
         return jobs.stream()
@@ -36,18 +43,27 @@ public class JobServiceImpl implements JobService {
                 .collect(Collectors.toList());
     }
 
-    private JobWithCompanyDTO convertToDto(Job job){
+    private JobDTO convertToDto(Job job) {
 
-            RestTemplate restTemplate = new RestTemplate();
-            JobWithCompanyDTO jobWithCompanyDTO = new JobWithCompanyDTO();
+        //RestTemplate restTemplate = new RestTemplate();
 
-            jobWithCompanyDTO.setJob(job);
 
-            jobWithCompanyDTO.setCompany(
-                    restTemplate.getForObject("http://localhost:8086/companies/" + job.getCompanyId(), Company.class)
-            );
+        Company company = restTemplate.getForObject("http://COMPANY-SERVICE:8086/companies/" + job.getCompanyId(), Company.class);
+        ResponseEntity<List<Review>> reviewResponse = restTemplate.exchange("http://REVIEW-SERVICE:8087/reviews?companyId=" + job.getCompanyId(),
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<List<Review>>() {
+                });
 
-        return jobWithCompanyDTO;
+        List<Review> reviews = reviewResponse.getBody();
+
+        JobDTO jobDTO = JobMapper.mapToJobCompanyDto(
+                job, company, reviews
+        );
+
+        // jobWithCompanyDTO.setCompany(company);
+
+        return jobDTO;
     }
 
     @Override
@@ -57,17 +73,19 @@ public class JobServiceImpl implements JobService {
     }
 
     @Override
-    public Job findById(Long id) {
-       return jobRepository.findById(id).orElse(null);
+    public JobDTO findById(Long id) {
+
+        Job job = jobRepository.findById(id).orElse(null);
+        return convertToDto(job);
     }
 
     @Override
     public boolean deleteById(Long id) {
 
-        try{
+        try {
             jobRepository.deleteById(id);
             return true;
-        } catch (Exception e){
+        } catch (Exception e) {
             return false;
         }
     }
@@ -75,7 +93,7 @@ public class JobServiceImpl implements JobService {
     @Override
     public boolean updateJob(Long id, Job updatedJob) {
         Optional<Job> jobOptional = jobRepository.findById(id);
-        if(jobOptional.isPresent()){
+        if (jobOptional.isPresent()) {
             Job job = jobOptional.get();
             job.setTitle(updatedJob.getTitle());
             job.setDescription(updatedJob.getDescription());
@@ -84,10 +102,9 @@ public class JobServiceImpl implements JobService {
             job.setMinSalary(updatedJob.getMinSalary());
             jobRepository.save(job);
             return true;
-            }
-        return false;
         }
-
+        return false;
+    }
 
 
 }

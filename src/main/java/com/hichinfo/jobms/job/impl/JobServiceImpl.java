@@ -71,7 +71,7 @@ public class JobServiceImpl implements JobService {
 //                });
 
         // List<Review> reviews = reviewResponse.getBody();
-
+         // This one is using Open Feign
         List<Review> reviews = reviewClient.getReviews(job.getCompanyId());
 
 
